@@ -7,7 +7,7 @@ function App() {
   const [response, setResponse] = useState('');
   const [displayData, setDisplayData] = useState(null);
   const [residualPlot, setResidualPlot] = useState(null);
-  const [residualPlotLoading, setResidualPlotLoading] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
   const [question, setQuestion] = useState('');
   const [responseCode, setResponseCode] = useState('');
   const [PlotUrl, setPlotUrl] = useState('');
@@ -83,6 +83,8 @@ function App() {
 
       const result = await response.json();
       setResponse(result.response);
+      setChatHistory(prevHistory => [...prevHistory, { question: inputValue, answer: result.response }]);
+      setInputValue('');
     } catch (error) {
       console.error('Error:', error);
       setResponse('Failed to send data to Flask');
@@ -201,7 +203,15 @@ function App() {
         </div>
       )}
 
-        <h1>Ask Your Question</h1>
+      <h1>Chat with AI</h1>
+      <div className="chat-box" style={{ padding: '20px', margin: '20px', border: '2px solid #ccc', fontSize: '14px', height: '400px', overflowY: 'scroll', width: '100%', maxWidth: '600px' }}>
+      {chatHistory.map((chat, index) => (
+            <div key={index} style={{ marginBottom: '10px' }}>
+              <strong>Question:</strong> {chat.question}<br />
+              <strong>Answer:</strong> {chat.answer}
+            </div>
+          ))}
+        </div>
         <input
           type="text"
           placeholder="Type your question here..."
@@ -222,17 +232,9 @@ function App() {
         <div className="display-box" style={{ padding: '10px', margin: '100px', border: '7px solid #ccc', fontSize: '20px', backgroundColor: 'white', color: 'grey' }}>
           Response: {response}
         </div>
-        {/* <div className="display-box" style={{ padding: '20px', margin: '20px', border: '2px solid #ccc', fontSize: '14px' }}>
-          <h2>Residual Plot</h2>
-          {residualPlot ? (
-            <img src={residualPlot} alt="Residual Plot" style={{ maxWidth: '100%' }} />
-          ) : (
-            <p>Loading residual plot...</p>
-          )}
-        </div> */}
       </header>
     </div>
   );
 }
 
-export default App;
+export default App; 
