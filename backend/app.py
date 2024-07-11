@@ -24,75 +24,54 @@ app = Flask(__name__)
 # Apply CORS to all routes, allowing all origins
 CORS(app)
 
+# Helper function to load and preprocess the dataset
+def load_and_preprocess_data(file_path):
+    dataset = pd.read_csv(file_path)
+    X = dataset.loc[:, ["baths", "bedrooms"]]
+    ksqft = dataset.sqft.apply(lambda x: x/1000)
+    X["ksqft"] = ksqft
+    y = (dataset["price"]/1000).values
 
-dataset = pd.read_csv("/Users/emmazhuang/Documents/Codes/CSCD95/nyc_housing_data.csv")
+    X_scaler = StandardScaler().fit(X)
+    X_scaled = X_scaler.transform(X)
+    X_scaled[:, 0] *= -1
 
-X = dataset.loc[:, ["baths", "bedrooms"]]
-ksqft = dataset.sqft.apply(lambda x: x/1000)
-X["ksqft"] = ksqft
-y = (dataset["price"]/1000).values
+    y_scaler = StandardScaler().fit(y.reshape(-1, 1))
+    y_scaled = y_scaler.transform(y.reshape(-1, 1))
 
-X_scaler = StandardScaler().fit(X)
-X_scaled = X_scaler.transform(X)
-X_scaled[:,0]*=-1
+    return X, y, X_scaled, y_scaled, X_scaler, y_scaler
 
-y_scaler = StandardScaler().fit(y.reshape(-1, 1))
-y_scaled = y_scaler.transform(y.reshape(-1, 1))
+# Helper function to split the data
+def split_data(X, y, X_scaled, y_scaled, test_size=0.2, random_state=0):
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state)
+    X_train_scaled, X_test_scaled, y_train_scaled, y_test_scaled = train_test_split(X_scaled, y_scaled, test_size=test_size, random_state=random_state)
+    return X_train, X_test, y_train, y_test, X_train_scaled, X_test_scaled, y_train_scaled, y_test_scaled
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
-X_train_scaled, X_test_scaled, y_train_scaled, y_test_scaled = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=0)
+# Helper function to train the model
+def train_model(X_train_scaled, y_train_scaled):
+    model = LinearRegression(fit_intercept=False).fit(X_train_scaled, y_train_scaled)
+    return model
 
-model = LinearRegression(fit_intercept=False).fit(X_train_scaled, y_train_scaled)
+# Helper function to make predictions
+def make_predictions(model, X_train_scaled, X_test_scaled, y_scaler, y_train_scaled):
+    yp_train = model.predict(X_train_scaled)
+    yp_test = model.predict(X_test_scaled)
+    y_train_pred = y_scaler.inverse_transform(yp_train)
+    y_train_true = y_scaler.inverse_transform(y_train_scaled.reshape(-1, 1))
+    return y_train_pred, y_train_true, yp_test
 
-yp_train = model.predict(X_train_scaled)
-yp_test = model.predict(X_test_scaled)
-
-# Inverse transform the predicted and true values for the training set
-y_train_pred = y_scaler.inverse_transform(yp_train)
-y_train_true = y_scaler.inverse_transform(y_train_scaled.reshape(-1, 1))
-
-# Calculate residuals for the training set
-train_residuals = y_train_true - y_train_pred
-# Create a figure and axis
-fig, ax = plt.subplots(figsize=(8, 6))
-
-# Plot the residuals against the predicted values for the training set
-ax.scatter(y_train_pred, train_residuals, alpha=0.5, label='Training Data')
-
-# Add a horizontal line at y=0
-ax.axhline(y=0, color='r', linestyle='--')
-
-# Add labels and title
-ax.set_xlabel('Predicted Values (in thousands of dollars)')
-ax.set_ylabel('Residuals (in thousands of dollars)')
-ax.set_title('Residual Plot for Training Data')
-ax.legend()
-
-# Show the plot
-# plt.show()
-
-
-@app.route('/residual_plot')
-def residual_plot():
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.scatter(y_train_pred, train_residuals, alpha=0.5, label='Training Data')
-    ax.axhline(y=0, color='r', linestyle='--')
-    ax.set_xlabel('Predicted Values (in thousands of dollars)')
-    ax.set_ylabel('Residuals (in thousands of dollars)')
-    ax.set_title('Residual Plot for Training Data')
-    ax.legend()
-    print("yes")
-
-    buf = BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight')
-    buf.seek(0)
-    plt.close(fig)  # Close the plot to free memory
-
-    return send_file(buf, mimetype='image/png', as_attachment=True, download_name='residual_plot.png')
-
+# Helper function to simulate user
 def simulate_user(fit, instances):
     return np.sum(np.array(fit)*instances, axis=1)
 
+# Define Global Variables
+file_path = "/Users/emmazhuang/Documents/Codes/CSCD95/nyc_housing_data.csv"
+X, y, X_scaled, y_scaled, X_scaler, y_scaler = load_and_preprocess_data(file_path)
+X_train, X_test, y_train, y_test, X_train_scaled, X_test_scaled, y_train_scaled, y_test_scaled = split_data(X, y, X_scaled, y_scaled)
+model = train_model(X_train_scaled, y_train_scaled)
+y_train_pred, y_train_true, yp_test = make_predictions(model, X_train_scaled, X_test_scaled, y_scaler, y_train_scaled)
+
+# For Displaying the Data
 def model_with_AI_Pred(X_train_scaled, yp_test, n=5, seed=0):
     random.seed(seed)
     indices = random.sample(range(len(yp_test)), n)
@@ -156,6 +135,7 @@ def generate_responses(X_train_scaled, user_input, yp_test, n=5, seed=0):
     json_string = json.dumps(json_data, indent=4)
     return json_string
 
+# For part 3, What do you think the feature weights are?
 @app.route('/submit', methods=['POST'])
 def submit():
     data = request.get_json()
@@ -175,10 +155,10 @@ def submit():
     # Set up the headers and data payload for the OpenAI API call
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer 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'  # Replace YOUR_OPENAI_API_KEY with your actual OpenAI API key
+        'Authorization': 'Bearer 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'
     }
     payload = {
-        'model': 'gpt-4',  # Specify the model you want to use
+        'model': 'gpt-4o',  # Specify the model you want to use
         'messages': [{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': question}],
         'max_tokens': 150  # You can adjust max_tokens as per your requirements
     }
@@ -222,11 +202,7 @@ def question():
     print(response)
     # Check if the request to the OpenAI API was successful
     if response.status_code == 200:
-        # Parse the response from OpenAI
         gpt_response = response.json()
-        # Extract the text from the response
-        # gpt_text = gpt_response['choices'][0]['text']
-        # Return the GPT-4 generated text as JSON
         print(gpt_response['choices'][0]['message']['content'])
         return jsonify({'response': gpt_response['choices'][0]['message']['content']})
     else:
@@ -237,8 +213,6 @@ def question():
 def display():
     json_output = model_with_AI_Pred(X_train_scaled, yp_test, n=4, seed=0)
     return jsonify(json.loads(json_output))
-
-
 
 @app.route('/generate_code', methods=['POST'])
 def generate_code():
