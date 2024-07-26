@@ -70,6 +70,7 @@ X, y, X_scaled, y_scaled, X_scaler, y_scaler = load_and_preprocess_data(file_pat
 X_train, X_test, y_train, y_test, X_train_scaled, X_test_scaled, y_train_scaled, y_test_scaled = split_data(X, y, X_scaled, y_scaled)
 model = train_model(X_train_scaled, y_train_scaled)
 y_train_pred, y_train_true, yp_test = make_predictions(model, X_train_scaled, X_test_scaled, y_scaler, y_train_scaled)
+train_residuals = y_train_true - y_train_pred
 
 # For Displaying the Data
 def model_with_AI_Pred(X_train_scaled, yp_test, n=5, seed=0):
@@ -252,7 +253,7 @@ def generate_code():
     payload = {
         'model': 'gpt-4o',  
         'messages': [{'role': 'user', 'content': prompt}],
-        'max_tokens': 200 
+        'max_tokens': 2000
     }
     
     response = requests.post('https://api.openai.com/v1/chat/completions', json=payload, headers=headers)
@@ -291,7 +292,23 @@ def execute_code():
 
     return jsonify({'imageUrl': img_url})
 
+@app.route('/residual_plot')
+def residual_plot():
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.scatter(y_train_pred, train_residuals, alpha=0.5, label='Training Data')
+    ax.axhline(y=0, color='r', linestyle='--')
+    ax.set_xlabel('Predicted Values (in thousands of dollars)')
+    ax.set_ylabel('Residuals (in thousands of dollars)')
+    ax.set_title('Residual Plot for Training Data')
+    ax.legend()
+    print("yes")
+
+    buf = BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight')
+    buf.seek(0)
+    plt.close(fig)  # Close the plot to free memory
+
+    return send_file(buf, mimetype='image/png', as_attachment=True, download_name='residual_plot.png')
+
 if __name__ == '__main__':
     app.run(debug=True, host='localhost', port=5001)
-
-    

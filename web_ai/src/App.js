@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
+import 'react-tabs/style/react-tabs.css';
 import './App.css';
 
 function App() {
@@ -7,11 +9,14 @@ function App() {
   const [response, setResponse] = useState('');
   const [displayData, setDisplayData] = useState(null);
   const [residualPlot, setResidualPlot] = useState(null);
+  const [residualPlotLoading, setResidualPlotLoading] = useState(false);
   const [chatHistory, setChatHistory] = useState([]);
   const [question, setQuestion] = useState('');
   const [responseCode, setResponseCode] = useState('');
   const [PlotUrl, setPlotUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [weightResponse, setWeightResponse] = useState('');
+  const [weightSubmitted, setWeightSubmitted] = useState(false);
 
   const handleQuestionChange = (event) => {
     setQuestion(event.target.value);
@@ -49,13 +54,14 @@ function App() {
       }
 
       const execData = await execResponse.json();
+      console.log('Plot URL:', execData.imageUrl); // Debugging log
       setPlotUrl(execData.imageUrl);
     } catch (error) {
       console.error('Error:', error);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   const handleInputChange = (event) => {
     setInputValue(event.target.value);
@@ -112,7 +118,8 @@ function App() {
       }
 
       const result = await response.json();
-      setResponse(result.response);
+      setWeightResponse(result.response);
+      setWeightSubmitted(true);
     } catch (error) {
       console.error('Error:', error);
       setResponse('Failed to send data to Flask');
@@ -155,86 +162,101 @@ function App() {
         }
       }
     };
-  
+
     fetchResidualPlot();
     fetchDisplayData();
     return () => {
       isMounted = false;
       URL.revokeObjectURL(residualPlot); // Clean up blob URL
     };
-  }, []); 
+  }, []);
+
   return (
     <div className="App">
       <header className="App-header">
-        <div className="display-box" style={{ padding: '20px', margin: '20px', border: '2px solid #ccc', fontSize: '14px' }}>
-          <h2>Display Data</h2>
-          {displayData ? (
-            Object.entries(displayData).map(([key, value]) => (
-              <div key={key}>
-                <strong>{key}</strong>: {JSON.stringify(value, null, 2)}
-              </div>
-            ))
-          ) : (
-            <p>Loading display data...</p>
-          )}
-        </div>
-        <h1>Generate Plot</h1>
-      <input
-        type="text"
-        placeholder="Enter your question..."
-        value={question}
-        onChange={handleQuestionChange}
-      />
-      <button onClick={handleGenerateCode} disabled={loading}>
-        {loading ? 'Loading...' : 'Generate Code and Plot'}
-      </button>
-      {responseCode && (
-        <div>
-          <h2>Generated Python Code</h2>
-          <pre className="code-block">
-              <code>{responseCode}</code>
-          </pre>
-        </div>
-      )}
-      {PlotUrl && (
-        <div>
-          <h2>Plot</h2>
-          <img src={PlotUrl} alt="Plot required by the user" style={{ maxWidth: '100%' }} />
-        </div>
-      )}
+        <Tabs>
+          <TabList>
+            <Tab>Generate Plot</Tab>
+            <Tab>Chat with AI</Tab>
+          </TabList>
 
-      <h1>Chat with AI</h1>
-      <div className="chat-box" style={{ padding: '20px', margin: '20px', border: '2px solid #ccc', fontSize: '14px', height: '400px', overflowY: 'scroll', width: '100%', maxWidth: '600px' }}>
-      {chatHistory.map((chat, index) => (
-            <div key={index} style={{ marginBottom: '10px' }}>
-              <strong>Question:</strong> {chat.question}<br />
-              <strong>Answer:</strong> {chat.answer}
+          <TabPanel>
+            <div className="display-box">
+              <h2>Display Data</h2>
+              {displayData ? (
+                Object.entries(displayData).map(([key, value]) => (
+                  <div key={key}>
+                    <strong>{key}</strong>: {JSON.stringify(value, null, 2)}
+                  </div>
+                ))
+              ) : (
+                <p>Loading display data...</p>
+              )}
             </div>
-          ))}
-        </div>
-        <input
-          type="text"
-          placeholder="Type your question here..."
-          value={inputValue}
-          onChange={handleInputChange}
-        />
-        <button onClick={handleSubmit}>Submit</button>
-        
-        <h2>What do you think the feature weights are?</h2>
-        <input
-          type="text"
-          placeholder="Example: 0.3 0.5 0.7"
-          value={decimalInput}
-          onChange={handleDecimalInputChange}
-        />
-        <button onClick={handleDecimalSubmit}>Submit Decimals</button>
+            <h1>Generate Plot</h1>
+            <input
+              type="text"
+              placeholder="Enter your question..."
+              value={question}
+              onChange={handleQuestionChange}
+              className="question-input"
+            />
+            <button onClick={handleGenerateCode} disabled={loading}>
+              {loading ? 'Loading...' : 'Generate Code and Plot'}
+            </button>
+            {responseCode && (
+              <div>
+                <h2>Generated Python Code</h2>
+                <pre className="code-block">
+                    <code>{responseCode}</code>
+                </pre>
+              </div>
+            )}
+            {PlotUrl && (
+              <div>
+                <h2>Plot</h2>
+                <img src={PlotUrl} alt="Plot generated by the code" className="plot-image"/>
+              </div>
+            )}
+          </TabPanel>
 
-        <div className="display-box" style={{ padding: '10px', margin: '100px', border: '7px solid #ccc', fontSize: '20px', backgroundColor: 'white', color: 'grey' }}>
-          Response: {response}
-        </div>
+          <TabPanel>
+            <h1>Chat with AI</h1>
+            <div className="chat-box">
+              {chatHistory.map((chat, index) => (
+                <div key={index} style={{ marginBottom: '10px' }}>
+                  <strong>Question:</strong> {chat.question}<br />
+                  <strong>Answer:</strong> {chat.answer}
+                </div>
+              ))}
+            </div>
+            <input
+              type="text"
+              placeholder="Type your question here..."
+              value={inputValue}
+              onChange={handleInputChange}
+            />
+            <button onClick={handleSubmit}>Submit</button>
+            
+            <h2>What do you think the feature weights are?</h2>
+            <input
+              type="text"
+              placeholder="Example: 0.3 0.5 0.7"
+              value={decimalInput}
+              onChange={handleDecimalInputChange}
+            />
+            <button onClick={handleDecimalSubmit}>Submit Decimals</button>
+
+            {weightSubmitted && (
+              <div className="display-box">
+                Response: {weightResponse}
+              </div>
+            )}
+          </TabPanel>
+        </Tabs>
       </header>
     </div>
   );
 }
 
-export default App; 
+export default App;
