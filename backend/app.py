@@ -248,7 +248,7 @@ def generate_code():
 
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer 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'  # Replace YOUR_OPENAI_API_KEY with your actual OpenAI API key
+        'Authorization': 'Bearer openai_key'
     }
     payload = {
         'model': 'gpt-4o',  
