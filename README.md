@@ -35,3 +35,6 @@ Once both the backend and frontend are running, participants can access the appl
 ### Features
 **Ask Questions**: Participants can ask the LLM questions about the dataset to gain insights and clarifications.<br>
 **Generate Plots**: The interface allows users to generate visualizations of the dataset, helping to contextualize and better understand the data.
+
+## Authors
+This web interface was fully created and is maintained by Jian Yun Zhuang. The project is ongoing and led by Jessica Bo, under the supervision of Professor Ashton Anderson at the University of Toronto.
