@@ -19,18 +19,23 @@ import base64
 matplotlib.use('Agg')
 from io import BytesIO
 
+matplotlib.use('Agg')
 
 app = Flask(__name__)
-# Apply CORS to all routes, allowing all origins
 CORS(app)
+
+# Global variable to store chat history
+chat_history = []
+
+messages = []
 
 # Helper function to load and preprocess the dataset
 def load_and_preprocess_data(file_path):
     dataset = pd.read_csv(file_path)
     X = dataset.loc[:, ["baths", "bedrooms"]]
-    ksqft = dataset.sqft.apply(lambda x: x/1000)
+    ksqft = dataset.sqft.apply(lambda x: x / 1000)
     X["ksqft"] = ksqft
-    y = (dataset["price"]/1000).values
+    y = (dataset["price"] / 1000).values
 
     X_scaler = StandardScaler().fit(X)
     X_scaled = X_scaler.transform(X)
@@ -62,9 +67,9 @@ def make_predictions(model, X_train_scaled, X_test_scaled, y_scaler, y_train_sca
 
 # Helper function to simulate user
 def simulate_user(fit, instances):
-    return np.sum(np.array(fit)*instances, axis=1)
+    return np.sum(np.array(fit) * instances, axis=1)
 
-# Define Global Variables
+# Load and preprocess data
 file_path = "/Users/emmazhuang/Documents/Codes/CSCD95/nyc_housing_data.csv"
 X, y, X_scaled, y_scaled, X_scaler, y_scaler = load_and_preprocess_data(file_path)
 X_train, X_test, y_train, y_test, X_train_scaled, X_test_scaled, y_train_scaled, y_test_scaled = split_data(X, y, X_scaled, y_scaled)
@@ -83,60 +88,20 @@ def model_with_AI_Pred(X_train_scaled, yp_test, n=5, seed=0):
     for i in range(n):
         json_data[f"item_{i+1}"] = {
             "Feature Values": {
-                    "Feature 1": round(instances[i, 0],2),
-                    "Feature 2": round(instances[i, 1], 2),
-                    "Feature 3": round(instances[i, 2],2),
-                },
+                "Feature 1": round(instances[i, 0], 2),
+                "Feature 2": round(instances[i, 1], 2),
+                "Feature 3": round(instances[i, 2], 2),
+            },
             "AI Predictions": round(ai_preds[i], 2)
         }
 
     json_string = json.dumps(json_data, indent=4)
     return json_string
 
-def generate_responses(X_train_scaled, user_input, yp_test, n=5, seed=0):
-    random.seed(seed)
-    indices = random.sample(range(len(yp_test)), n)
-    instances = X_test_scaled[indices]
-    ai_preds = yp_test[indices].squeeze()
-    good_ans = True
-    user_ans = user_input.split()
-    user_ans_cleaned = []
-    for i in user_ans:
-        if i.isdigit():
-            user_ans_cleaned.append(int(i))
-        else:
-            good_ans =False
-            break
-    
-    if len(user_ans_cleaned) != 3:
-        good_ans= False
+system_prompt = """You are a data analyst who will help non-technical users of AI systems understand the influence of 
+                data features on the prediction made by a blackbox AI. Here is the information about the blackbox""" + model_with_AI_Pred(X_train_scaled, yp_test, n=4, seed=0)
+messages.append({'role': 'system', 'content': system_prompt})
 
-    print(user_ans_cleaned)
-    if good_ans:
-        responses = simulate_user(fit=user_ans_cleaned, instances=instances)
-    else:
-        responses = simulate_user(fit=[0, 0, 0], instances=instances)
-
-    json_data = {}
-    for i in range(n):
-        error= responses[i]-ai_preds[i]
-        pos_neg = ' higher '
-        if error < 0:
-            pos_neg = ' lower '
-            error = error*-1
-        json_data[f"item_{i+1}"] = {
-            "Feature Values": {
-                    "Feature 1": instances[i, 0],
-                    "Feature 2": instances[i, 1],
-                    "Feature 3": instances[i, 2],
-                },
-            "User Estimation Error": "The user estimation is " + str(error) + pos_neg + "compared to AI Prediction"
-        }
-
-    json_string = json.dumps(json_data, indent=4)
-    return json_string
-
-# For part 3, What do you think the feature weights are?
 @app.route('/submit', methods=['POST'])
 def submit():
     data = request.get_json()
@@ -149,66 +114,67 @@ def submit():
                     for the user to improve their understanding of how the AI makes predictions. 
                  """
 
-    question = """\nExamine the user estimations error and directly provide instructions to the user on how they can improve their understanding of feature importances. Focus on the biggest areas of error, e.g. if the user has errorenous understanding of the direction of correlation or the mangnitude of influence. 
-                      Please phrase the output in 2nd person, addressing the user directly. ONLY TWO SHORT SENTENCES. \n\n
-                   """+generate_responses(X_train_scaled, user_input, yp_test, n=4, seed=0)
+    question = f"""\nExamine the user estimations error and directly provide instructions to the user on how they can improve their understanding of feature importances. Focus on the biggest areas of error, e.g., if the user has an erroneous understanding of the direction of correlation or the magnitude of influence. 
+                      Please phrase the output in 2nd person, addressing the user directly. ONLY TWO SHORT SENTENCES.\n\n
+                   """ + generate_responses(X_train_scaled, user_input, yp_test, n=4, seed=0)
 
-    # Set up the headers and data payload for the OpenAI API call
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer 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'
+        'Authorization': 'Bearer '
     }
     payload = {
-        'model': 'gpt-4o',  # Specify the model you want to use
+        'model': 'gpt-4',  
         'messages': [{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': question}],
-        'max_tokens': 150  # You can adjust max_tokens as per your requirements
+        'max_tokens': 150
     }
-    
-    # Make the POST request to the OpenAI API
+
     response = requests.post('https://api.openai.com/v1/chat/completions', json=payload, headers=headers)
-    print(response)
-    # Check if the request to the OpenAI API was successful
+
     if response.status_code == 200:
-        # Parse the response from OpenAI
         gpt_response = response.json()
-        # Extract the text from the response
-        # gpt_text = gpt_response['choices'][0]['text']
-        # Return the GPT-4 generated text as JSON
-        print(gpt_response['choices'][0]['message']['content'])
         return jsonify({'response': gpt_response['choices'][0]['message']['content']})
     else:
-        # If the request failed, return an error message and the status code
         return jsonify({'error': 'Failed to fetch response from OpenAI', 'status_code': response.status_code})
-    
+
 @app.route('/question', methods=['POST'])
 def question():
+    
     data = request.get_json()
     user_input = data.get('prompt', 'No prompt provided')
-
-    system_prompt = """You are a data analyst who will help non-technical users of AI systems understand the influence of 
-                    data features on the prediction made by a blackbox AI. Here is the information about the blackbox"""+model_with_AI_Pred(X_train_scaled, yp_test, n=4, seed=0)
-    # Set up the headers and data payload for the OpenAI API call
+    messages.append({'role': 'user', 'content': user_input})
+    
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer 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'  # Replace YOUR_OPENAI_API_KEY with your actual OpenAI API key
+        'Authorization': 'Bearer '
     }
     payload = {
-        'model': 'gpt-4o',  # Specify the model you want to use
-        'messages': [{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': user_input}],
-        'max_tokens': 150  # You can adjust max_tokens as per your requirements
+        'model': 'gpt-4',
+        'messages': messages,
+        'max_tokens': 1500
     }
-    
-    # Make the POST request to the OpenAI API
     response = requests.post('https://api.openai.com/v1/chat/completions', json=payload, headers=headers)
-    print(response)
-    # Check if the request to the OpenAI API was successful
+
     if response.status_code == 200:
         gpt_response = response.json()
-        print(gpt_response['choices'][0]['message']['content'])
-        return jsonify({'response': gpt_response['choices'][0]['message']['content']})
+        answer = gpt_response['choices'][0]['message']['content']
+        # Save the question and answer to the chat history
+        chat_history.append({'question': user_input, 'answer': answer})
+        messages.append({'role': 'assistant', 'content': answer})
+        return jsonify({'response': answer})
     else:
-        # If the request failed, return an error message and the status code
         return jsonify({'error': 'Failed to fetch response from OpenAI', 'status_code': response.status_code})
+
+@app.route('/download_chat', methods=['GET'])
+def download_chat():
+    filename = 'chat_history.txt'
+    
+    with open(filename, 'w') as file:
+        for entry in chat_history:
+            file.write(f"Question: {entry['question']}\n")
+            file.write(f"Answer: {entry['answer']}\n")
+            file.write("\n")
+    
+    return send_file(filename, as_attachment=True)
 
 @app.route('/display', methods=['GET'])
 def display():
@@ -232,14 +198,8 @@ def generate_code():
     
     Try to support the user as much as you can by helping them in VERIFICATION of different assumptions about the data and the current output so far.
     
-    DO NOT TRY TO SOLVE THE TASK. Just focus on the user's question. This is a SIDE QUERY. Also, use the dataset path directly in your code. 
+    DO NOT TRY TO SOLVE THE TASK. Just focus on the user's question. This is a SIDE QUERY. Also, use the dataset path directly in your code.
     
-    You can access all the variables, dataframes, and other objects that have been defined in the previous steps. So you can easily use them to answer the user's question.    
-    ## Use the following Template:
-    [start-code]
-    <python_code>
-    [end-code]
-
     Generate Python code that answers this question:
     {question}
     
@@ -248,10 +208,10 @@ def generate_code():
 
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer openai_key'
+        'Authorization': 'Bearer'
     }
     payload = {
-        'model': 'gpt-4o',  
+        'model': 'gpt-4',  
         'messages': [{'role': 'user', 'content': prompt}],
         'max_tokens': 2000
     }
@@ -301,7 +261,7 @@ def residual_plot():
     ax.set_ylabel('Residuals (in thousands of dollars)')
     ax.set_title('Residual Plot for Training Data')
     ax.legend()
-    print("yes")
+
 
     buf = BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight')
